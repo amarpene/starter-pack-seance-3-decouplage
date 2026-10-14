@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: LogiFlow GPS Ingestion API
+  version: 1.0.0
+  description: API d'ingestion des positions GPS des chauffeurs.
+paths:
+  /api/positions:
+    post:
+      operationId: submitPosition
+      summary: Ingest a GPS position
+      description: Accepte une position GPS pour traitement asynchrone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositionRequest'
+      responses:
+        '202':
+          description: Position accepted for asynchronous processing.
+        '400':
+          description: Invalid request body or GPS position.
+components:
+  schemas:
+    PositionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - driverId
+        - latitude
+        - longitude
+        - timestamp
+      properties:
+        driverId:
+          type: string
+          description: Identifiant du chauffeur.
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        timestamp:
+          type: integer
+          description: Horodatage de la position fourni par le client, en millisecondes Unix.

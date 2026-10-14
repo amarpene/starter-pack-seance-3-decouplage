@@ -1,0 +1,49 @@
+asyncapi: 3.0.0
+info:
+  title: LogiFlow GPS Events
+  version: 1.0.0
+  description: Contrat des événements de position GPS diffusés aux workers.
+channels:
+  logiflowGpsPing:
+    address: logiflow.gps.v1.ping
+    messages:
+      gpsPing:
+        $ref: '#/components/messages/GpsPing'
+operations:
+  publishGpsPing:
+    action: send
+    summary: Diffuse une position GPS aux workers.
+    channel:
+      $ref: '#/channels/logiflowGpsPing'
+    messages:
+      - $ref: '#/channels/logiflowGpsPing/messages/gpsPing'
+components:
+  messages:
+    GpsPing:
+      name: GpsPing
+      title: Position GPS reçue
+      contentType: application/json
+      payload:
+        type: object
+        additionalProperties: false
+        required:
+          - driverId
+          - latitude
+          - longitude
+          - receivedAt
+        properties:
+          driverId:
+            type: string
+            description: Identifiant du chauffeur.
+          latitude:
+            type: number
+            minimum: -90
+            maximum: 90
+          longitude:
+            type: number
+            minimum: -180
+            maximum: 180
+          receivedAt:
+            type: string
+            format: date-time
+            description: Date et heure de réception par le service d'ingestion, au format RFC 3339.
