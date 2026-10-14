@@ -63,8 +63,13 @@ Les requêtes acceptées reçoivent `202` dès leur mise en file ; le traitement
 des positions est effectué ensuite par le worker. Consultez le backlog avec
 `curl http://localhost:3000/metrics`. Le script affiche séparément la latence
 aller-retour du client et le p95 d'ingestion serveur (en-tête `Server-Timing`) ;
-le seuil du crash-test en rafale est inférieur à 50 ms côté serveur. La cible
-nominale reste une ingestion inférieure à 10 ms hors forte contention.
+le critère strict est de recevoir les 100 réponses `202` en moins de 10 ms
+chacune. Le script échoue explicitement si une requête manque le seuil.
+Sur Docker Desktop Windows, le dernier essai a accepté les 100 requêtes, mais
+0/100 réponses aller-retour sont restées sous 10 ms (p95 : 282 ms) ; le p95
+mesuré par l'API était de 35,53 ms. Le critère de latence n'est donc pas validé
+sur cet environnement, même si l'acceptation asynchrone fonctionne. Il faut
+rejouer la mesure sur l'environnement cible avant de revendiquer ce SLA.
 
 ---
 
@@ -74,12 +79,11 @@ Arrêtez le worker sans arrêter Redis ni l'API, puis injectez un lot de positio
 
 ```bash
 docker compose stop gps-worker
-node scripts/inject-load-node.js
-curl http://localhost:3000/metrics
+node scripts/test-chaos.js
 ```
 
-Les appels doivent toujours recevoir `202` et le compteur `waiting` doit
-augmenter. Redémarrez le worker :
+Le test vérifie 50 réponses `202` et l'augmentation de `waiting` pendant que
+le worker est arrêté. Redémarrez le worker :
 
 ```bash
 docker compose start gps-worker
@@ -101,10 +105,12 @@ node scripts/test-idempotence.js
 docker compose logs -f gps-worker
 ```
 
-BullMQ déduplique les jobs partageant cet identifiant ; un seul job doit être
-traité. Le worker vérifie également un marqueur Redis conservé pendant
-24 heures par défaut, ce qui protège contre une nouvelle livraison après le
-retrait du job terminé de BullMQ.
+Les deux requêtes créent deux jobs ; le worker doit en traiter un et ignorer
+l'autre. Le worker vérifie un marqueur Redis conservé pendant 24 heures par
+défaut. Avant le traitement, un script Lua Redis prend un verrou atomiquement ;
+un doublon déjà traité est acquitté sans réexécuter le traitement, tandis
+qu'un verrou actif provoque une nouvelle tentative BullMQ. Les métriques
+`processed` et `duplicates` permettent de vérifier ces résultats.
 
 ---
 

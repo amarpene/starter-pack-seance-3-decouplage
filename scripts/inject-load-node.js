@@ -6,7 +6,12 @@
  */
 
 const TARGET_URL = process.env.API_URL || 'http://localhost:3000/api/positions';
-const TOTAL_PINGS = 100;
+const TOTAL_PINGS = Number.parseInt(process.env.TOTAL_PINGS || '100', 10);
+const LATENCY_LIMIT_MS = 10;
+
+if (!Number.isInteger(TOTAL_PINGS) || TOTAL_PINGS <= 0) {
+  throw new Error('TOTAL_PINGS must be a positive integer');
+}
 
 async function sendPing(index) {
   const payload = {
@@ -58,9 +63,13 @@ async function run() {
   const p50 = durations[Math.floor(durations.length * 0.5)].toFixed(1);
   const p95 = durations[Math.floor(durations.length * 0.95)].toFixed(1);
   const p99 = durations[Math.floor(durations.length * 0.99)].toFixed(1);
+  const underLimitCount = results.filter((result) => result.success && result.duration < LATENCY_LIMIT_MS).length;
   const serverP95 = serverDurations.length === TOTAL_PINGS
     ? serverDurations[Math.floor(serverDurations.length * 0.95)]
     : Number.POSITIVE_INFINITY;
+  const serverUnderLimitCount = results.filter(
+    (result) => result.success && result.serverDuration !== null && result.serverDuration < LATENCY_LIMIT_MS
+  ).length;
 
   console.log('\n --- RÉSULTATS DU CRASH TEST (PIC DE CHARGE) ---');
   console.log(`Total requêtes envoyées : ${TOTAL_PINGS}`);
@@ -69,12 +78,14 @@ async function run() {
   console.log(`Latence aller-retour p50: ${p50} ms`);
   console.log(`Latence aller-retour p95: ${p95} ms`);
   console.log(`Latence aller-retour p99: ${p99} ms`);
+  console.log(`Réponses sous ${LATENCY_LIMIT_MS} ms : ${underLimitCount}/${TOTAL_PINGS}`);
+  console.log(`Ingestions serveur sous ${LATENCY_LIMIT_MS} ms : ${serverUnderLimitCount}/${TOTAL_PINGS}`);
   console.log(`Ingestion serveur p95   : ${Number.isFinite(serverP95) ? serverP95.toFixed(2) : 'indisponible'} ms`);
 
-  if (successes.length === TOTAL_PINGS && serverP95 < 50) {
-    console.log('\n ÉPREUVE 1 VALIDÉE : 100% des pings sont acceptés et l’ingestion serveur reste sous 50 ms au p95.');
+  if (successes.length === TOTAL_PINGS && underLimitCount === TOTAL_PINGS) {
+    console.log(`\n ÉPREUVE 1 VALIDÉE : ${TOTAL_PINGS}/${TOTAL_PINGS} pings répondent 202 en moins de ${LATENCY_LIMIT_MS} ms.`);
   } else {
-    console.log('\n ATTENTION : Certaines requêtes ont échoué ou dépassé le seuil de latence.');
+    console.log(`\n ÉPREUVE 1 ÉCHOUÉE : il faut ${TOTAL_PINGS}/${TOTAL_PINGS} réponses 202 en moins de ${LATENCY_LIMIT_MS} ms.`);
     process.exitCode = 1;
   }
 }

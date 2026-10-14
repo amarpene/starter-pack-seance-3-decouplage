@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { Queue } from 'bullmq';
 
-const fastify = Fastify({ logger: true });
+const fastify = Fastify({ logger: true, disableRequestLogging: true });
 
 const redisHost = process.env.REDIS_HOST || '127.0.0.1';
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -24,11 +24,10 @@ const flushPositionBatch = async () => {
 
   try {
     const jobs = await gpsQueue.addBulk(
-      batch.map(({ data }) => ({
+      batch.      map(({ data }) => ({
         name: 'position',
         data,
         opts: {
-          jobId: `ping-${encodeURIComponent(data.pingId)}`,
           attempts: 3,
           backoff: { type: 'exponential', delay: 1000 },
           removeOnComplete: { age: 86400, count: 10000 },
@@ -97,7 +96,14 @@ fastify.post('/api/positions', { schema: pingSchema }, async (request, reply) =>
 
 fastify.get('/metrics', async (request, reply) => {
   const counts = await gpsQueue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed');
-  return { queue: 'gps-pings', ...counts };
+  const redisClient = await gpsQueue.client;
+  const [processed, duplicates] = await redisClient.mget('gps:processed:count', 'gps:duplicate:count');
+  return {
+    queue: 'gps-pings',
+    ...counts,
+    processed: Number(processed || 0),
+    duplicates: Number(duplicates || 0),
+  };
 });
 
 fastify.get('/health', async () => {

@@ -6,10 +6,24 @@
  */
 
 const TARGET_URL = process.env.API_URL || 'http://localhost:3000/api/positions';
+const API_BASE_URL = new URL(TARGET_URL).origin;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function getMetrics() {
+  const response = await fetch(`${API_BASE_URL}/metrics`);
+  if (!response.ok) {
+    throw new Error(`Metrics endpoint returned HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 async function run() {
+  const baseline = await getMetrics();
+  if (baseline.waiting !== 0 || baseline.active !== 0 || baseline.delayed !== 0) {
+    throw new Error('Drain the queue before running the isolated idempotence test');
+  }
+
   const duplicatePingId = `ping_idempotent_test_${Date.now()}`;
   const payload = {
     pingId: duplicatePingId,
@@ -48,10 +62,31 @@ async function run() {
     throw new Error(`Expected duplicate request to be accepted with pingId ${duplicatePingId}`);
   }
 
-  console.log('\n Vérifiez les logs du worker :');
-  console.log('   docker compose logs -f gps-worker');
-  console.log('   Un seul job avec cet identifiant doit afficher "Traité".');
-  console.log('   Le second POST est accepté mais BullMQ ne crée pas de second job.');
+  let metrics;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await sleep(100);
+    metrics = await getMetrics();
+    if (metrics.completed >= baseline.completed + 2) {
+      break;
+    }
+  }
+
+  if (
+    metrics.completed !== baseline.completed + 2 ||
+    metrics.processed !== baseline.processed + 1 ||
+    metrics.duplicates !== baseline.duplicates + 1 ||
+    metrics.waiting !== 0 ||
+    metrics.active !== 0
+  ) {
+    throw new Error(
+      `Expected 2 completed jobs (one processed, one duplicate); metrics: ${JSON.stringify(metrics)}`
+    );
+  }
+
+  console.log('IDEMPOTENCE VALIDÉE : 2 jobs acquittés, 1 position traitée, 1 doublon ignoré côté worker.');
 }
 
-run();
+run().catch((err) => {
+  console.error('[Idempotence test failed]', err);
+  process.exitCode = 1;
+});
