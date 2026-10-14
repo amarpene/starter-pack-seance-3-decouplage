@@ -18,8 +18,28 @@ paths:
       responses:
         '202':
           description: Position accepted for asynchronous processing.
+          headers:
+            Server-Timing:
+              description: Durée de mise en file mesurée par le service d'ingestion.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accepted
+                  - pingId
+                properties:
+                  accepted:
+                    type: boolean
+                    const: true
+                  pingId:
+                    type: string
         '400':
           description: Invalid request body or GPS position.
+        '503':
+          description: The Redis-backed ingestion queue is unavailable.
 components:
   schemas:
     PositionRequest:
@@ -33,7 +53,13 @@ components:
       properties:
         driverId:
           type: string
+          minLength: 1
           description: Identifiant du chauffeur.
+        pingId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Identifiant optionnel assurant l'idempotence d'un ping.
         latitude:
           type: number
           minimum: -90

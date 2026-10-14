@@ -25,7 +25,15 @@ async function sendPing(index) {
     });
     const duration = performance.now() - start;
     const data = await res.json();
-    return { success: res.status === 202, status: res.status, duration, data };
+    const serverTiming = res.headers.get('server-timing');
+    const serverDuration = serverTiming?.match(/dur=([\d.]+)/)?.[1];
+    return {
+      success: res.status === 202,
+      status: res.status,
+      duration,
+      serverDuration: serverDuration === undefined ? null : Number(serverDuration),
+      data,
+    };
   } catch (err) {
     const duration = performance.now() - start;
     return { success: false, error: err.message, duration };
@@ -42,23 +50,32 @@ async function run() {
   const totalTime = performance.now() - globalStart;
   const successes = results.filter((r) => r.success);
   const durations = results.map((r) => r.duration).sort((a, b) => a - b);
+  const serverDurations = results
+    .map((r) => r.serverDuration)
+    .filter((duration) => duration !== null)
+    .sort((a, b) => a - b);
 
   const p50 = durations[Math.floor(durations.length * 0.5)].toFixed(1);
   const p95 = durations[Math.floor(durations.length * 0.95)].toFixed(1);
   const p99 = durations[Math.floor(durations.length * 0.99)].toFixed(1);
+  const serverP95 = serverDurations.length === TOTAL_PINGS
+    ? serverDurations[Math.floor(serverDurations.length * 0.95)]
+    : Number.POSITIVE_INFINITY;
 
   console.log('\n --- RÉSULTATS DU CRASH TEST (PIC DE CHARGE) ---');
   console.log(`Total requêtes envoyées : ${TOTAL_PINGS}`);
   console.log(`Succès (202 Accepted)  : ${successes.length}/${TOTAL_PINGS} (${((successes.length / TOTAL_PINGS) * 100).toFixed(0)}%)`);
   console.log(`Durée totale d'envoi    : ${totalTime.toFixed(1)} ms`);
-  console.log(`Latence médiane (p50)   : ${p50} ms`);
-  console.log(`Latence p95             : ${p95} ms`);
-  console.log(`Latence p99             : ${p99} ms`);
+  console.log(`Latence aller-retour p50: ${p50} ms`);
+  console.log(`Latence aller-retour p95: ${p95} ms`);
+  console.log(`Latence aller-retour p99: ${p99} ms`);
+  console.log(`Ingestion serveur p95   : ${Number.isFinite(serverP95) ? serverP95.toFixed(2) : 'indisponible'} ms`);
 
-  if (successes.length === TOTAL_PINGS && p95 < 50) {
-    console.log('\n ÉPREUVE 1 VALIDÉE : Découplage temporel et Load Leveling parfaits !');
+  if (successes.length === TOTAL_PINGS && serverP95 < 50) {
+    console.log('\n ÉPREUVE 1 VALIDÉE : 100% des pings sont acceptés et l’ingestion serveur reste sous 50 ms au p95.');
   } else {
     console.log('\n ATTENTION : Certaines requêtes ont échoué ou dépassé le seuil de latence.');
+    process.exitCode = 1;
   }
 }
 

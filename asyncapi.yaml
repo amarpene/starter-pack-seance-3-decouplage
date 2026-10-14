@@ -27,11 +27,16 @@ components:
         type: object
         additionalProperties: false
         required:
+          - pingId
           - driverId
           - latitude
           - longitude
+          - timestamp
           - receivedAt
         properties:
+          pingId:
+            type: string
+            description: Identifiant du ping utilisé pour la déduplication.
           driverId:
             type: string
             description: Identifiant du chauffeur.
@@ -43,6 +48,9 @@ components:
             type: number
             minimum: -180
             maximum: 180
+          timestamp:
+            type: integer
+            description: Horodatage de la position fourni par le client, en millisecondes Unix.
           receivedAt:
             type: string
             format: date-time

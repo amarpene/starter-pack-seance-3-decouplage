@@ -39,6 +39,9 @@ services:
       - REDIS_HOST=broker
       - REDIS_PORT=6379
       - PROCESSING_DELAY_MS=50
+      - WORKER_CONCURRENCY=5
+      - WORKER_MAX_PER_SECOND=100
+      - DEDUP_TTL_SECONDS=86400
     depends_on:
       broker:
         condition: service_healthy

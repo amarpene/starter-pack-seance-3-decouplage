@@ -29,6 +29,9 @@ async function run() {
   });
   const data1 = await res1.json();
   console.log(` Réponse 1er ping : Status ${res1.status}`, data1);
+  if (res1.status !== 202 || data1.pingId !== duplicatePingId) {
+    throw new Error(`Expected first request to be accepted with pingId ${duplicatePingId}`);
+  }
 
   console.log(` Attente de 1 seconde...`);
   await sleep(1000);
@@ -41,11 +44,14 @@ async function run() {
   });
   const data2 = await res2.json();
   console.log(` Réponse 2nd ping : Status ${res2.status}`, data2);
+  if (res2.status !== 202 || data2.pingId !== duplicatePingId) {
+    throw new Error(`Expected duplicate request to be accepted with pingId ${duplicatePingId}`);
+  }
 
-  console.log('\n Regardez les logs du worker :');
+  console.log('\n Vérifiez les logs du worker :');
   console.log('   docker compose logs -f gps-worker');
-  console.log('   Le 1er job doit afficher " Traité"');
-  console.log('   Le 2nd job doit afficher " DOUBLON DÉTECTÉ ... Message ignoré silencieusement"');
+  console.log('   Un seul job avec cet identifiant doit afficher "Traité".');
+  console.log('   Le second POST est accepté mais BullMQ ne crée pas de second job.');
 }
 
 run();
